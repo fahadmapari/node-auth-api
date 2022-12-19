@@ -5,9 +5,15 @@ require("dotenv").config();
 
 const app = express();
 
+const AuthRoute = require("./routes/Auth.route");
+
 app.use(express.json());
 
-app.get("/", async (req, res, next) => {});
+app.get("/", async (req, res, next) => {
+  res.send("hi");
+});
+
+app.use("/auth", AuthRoute);
 
 app.use(async (req, res, next) => {
   // const error = new Error("Not found");
