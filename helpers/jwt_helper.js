@@ -1,9 +1,12 @@
 const jwt = require("jsonwebtoken");
 const createError = require("http-errors");
+const client = require("./init_redis");
 
 exports.signAccessToken = (userId) => {
   return new Promise((resolve, reject) => {
-    const payload = {};
+    const payload = {
+      userId,
+    };
 
     const secretKey = process.env.ACCESS_TOKEN_SECRET;
 
@@ -47,7 +50,9 @@ exports.verifyAccessToken = (req, res, next) => {
 
 exports.signRefreshToken = (userId) => {
   return new Promise((resolve, reject) => {
-    const payload = {};
+    const payload = {
+      userId,
+    };
 
     const secretKey = process.env.REFRESH_TOKEN_SECRET;
 
@@ -56,13 +61,21 @@ exports.signRefreshToken = (userId) => {
       audience: userId,
     };
 
-    jwt.sign(payload, secretKey, options, (err, token) => {
+    jwt.sign(payload, secretKey, options, async (err, token) => {
       if (err) {
         console.log(err);
         return reject(createError.InternalServerError());
       }
 
-      return resolve(token);
+      try {
+        await client.set(userId, token, {
+          EX: 365 * 24 * 60 * 60,
+        });
+        return resolve(token);
+      } catch (error) {
+        console.log(error.message);
+        return reject(createError.InternalServerError());
+      }
     });
   });
 };
@@ -72,11 +85,20 @@ exports.verifyRefreshToken = (refreshToken) => {
     jwt.verify(
       refreshToken,
       process.env.REFRESH_TOKEN_SECRET,
-      (err, payload) => {
+      async (err, payload) => {
         if (err) return reject(createError.Unauthorized());
-        const userId = payload.aud;
 
-        resolve(userId);
+        try {
+          const userId = payload.aud;
+          const dbToken = await client.get(userId);
+          if (dbToken !== refreshToken)
+            return reject(createError.Unauthorized());
+
+          return resolve(userId);
+        } catch (error) {
+          console.log(error.message);
+          return reject(createError.InternalServerError());
+        }
       }
     );
   });

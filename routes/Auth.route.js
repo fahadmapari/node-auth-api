@@ -7,6 +7,7 @@ const {
   signRefreshToken,
   verifyRefreshToken,
 } = require("../helpers/jwt_helper");
+const client = require("../helpers/init_redis");
 
 router.post("/register", async (req, res, next) => {
   try {
@@ -21,8 +22,8 @@ router.post("/register", async (req, res, next) => {
       password: sanitizedBody.password,
     });
     const savedUser = await newUser.save();
-    const accessToken = await signAccessToken(savedUser._id);
-    const refreshToken = await signRefreshToken(savedUser._id);
+    const accessToken = await signAccessToken(savedUser.id);
+    const refreshToken = await signRefreshToken(savedUser.id);
 
     res.send({ accessToken, refreshToken });
   } catch (err) {
@@ -40,8 +41,8 @@ router.post("/login", async (req, res, next) => {
 
     if (!isMatch) throw createError.Unauthorized("Invalid email or password");
 
-    const accessToken = await signAccessToken(user._id);
-    const refreshToken = await signRefreshToken(user._id);
+    const accessToken = await signAccessToken(user.id);
+    const refreshToken = await signRefreshToken(user.id);
 
     res.send({
       accessToken,
@@ -72,8 +73,22 @@ router.post("/refresh-token", async (req, res, next) => {
   res.send("Refresh token route");
 });
 
-router.delete("/logout", (req, res, next) => {
-  res.send("delete route");
+router.delete("/logout", async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) throw createError.BadRequest();
+
+    const userId = await verifyRefreshToken(refreshToken);
+    try {
+      await client.del(userId);
+      res.sendStatus(204);
+    } catch (error) {
+      console.log(error);
+      throw createError.InternalServerError();
+    }
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;
